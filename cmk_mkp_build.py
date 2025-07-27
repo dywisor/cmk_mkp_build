@@ -83,6 +83,14 @@ def get_argument_parser(prog: str) -> argparse.ArgumentParser:
         help="output file",
     )
 
+    parser.add_argument(
+        "--show-info",
+        dest="show_info",
+        default=False,
+        action="store_true",
+        help="print generated info to stdout (in addition to creating the mkp file)",
+    )
+
     return parser
 
 
@@ -105,6 +113,9 @@ def main(prog: str, argv: list[str]) -> None | int | bool:
     )
 
     finalize_mkp_info(mkp_info, cmk_addon_files_tar_name, cmk_addon_files_list)
+
+    if arg_config.show_info:
+        print(json.dumps(mkp_info, indent=4))
 
     outfile = arg_config.outfile
     if not outfile:
