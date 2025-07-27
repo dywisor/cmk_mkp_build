@@ -31,6 +31,26 @@ else:
 class Globals:
     DEFAULT_CMK_VERSION = "2.0.3p22"
 
+    # mkp_info_template : key => (is required, default value)
+    mkp_info_template = {
+        "author": (False, ""),
+        "description": (False, ""),
+        "download_url": (False, ""),
+        # "files": (False, None),  # will be set during finalize_mkp_info()
+        "name": (True, ""),
+        "title": (True, ""),
+        "version": (True, ""),
+        "version.min_required": (True, DEFAULT_CMK_VERSION),
+        "version.packaged": (True, DEFAULT_CMK_VERSION),
+        "version.usable_until": (False, None),
+    }
+
+    @classmethod
+    def iter_mkp_info_template_args(cls) -> Iterator[tuple[str, str]]:
+        for name in sorted(Globals.mkp_info_template):
+            arg_name = "mkp_info_{}".format(name.replace(".", "_"))
+            yield (name, arg_name)
+
 
 @dataclass
 class FileInfo:
@@ -159,18 +179,11 @@ def load_json_file(filepath: str) -> Any:
 def prepare_mkp_info(
     arg_config: argparse.Namespace, plugin_source: FilesTree
 ) -> dict[str, Any]:
+
     def create_default_mkp_info() -> dict[str, Any]:
         return {
-            "author": None,
-            "description": None,
-            "download_url": None,
-            "files": None,
-            "name": None,
-            "title": None,
-            "version": None,
-            "version.min_required": Globals.DEFAULT_CMK_VERSION,
-            "version.packaged": Globals.DEFAULT_CMK_VERSION,
-            "version.usable_until": None,
+            key: default_value
+            for key, (is_required, default_value) in Globals.mkp_info_template.items()
         }
 
     def load_from_mkp_info_file(
@@ -243,16 +256,45 @@ def prepare_mkp_info(
             ("version", ["VERSION"]),
             ("description", ["README", "README.md"]),
         ]:
-            if mkp_info[varname] is None:
+            if not mkp_info[varname]:
                 read_var_from_file(mkp_info, plugin_source, varname, filenames)
 
     # --- end of add_missing_info_from_plugin_source (...) ---
+
+    def check_missing_info(mkp_info: dict[str, Any]) -> list[str]:
+        missing = []
+
+        for key, (is_required, default_value) in Globals.mkp_info_template.items():
+            if is_required:
+                try:
+                    value = mkp_info[key]
+                except KeyError:
+                    missing.append(key)
+
+                else:
+                    if (value is None) or (
+                        isinstance(default_value, str) and not value
+                    ):
+                        missing.append(key)
+
+        return missing
+
+    # --- end of check_missing_info (...) ---
 
     mkp_info = create_default_mkp_info()
 
     load_from_mkp_info_file(mkp_info, plugin_source)
     add_cmdline_info(mkp_info, arg_config)
     add_missing_info_from_plugin_source(mkp_info, plugin_source)
+
+    if missing := check_missing_info(mkp_info):
+        raise ValueError(
+            "missing mkp info variables: {}".format(", ".join(sorted(missing)))
+        )
+
+    # additional checks
+    if mkp_info.get("files"):
+        raise ValueError("files must not be set in mkp info manually")
 
     return mkp_info
 
