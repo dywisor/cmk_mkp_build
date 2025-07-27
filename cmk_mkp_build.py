@@ -75,16 +75,30 @@ class FilesTree(object):
     def add_file(self, info: FileInfo) -> None:
         self.files[info.name] = info
 
-    def _dfs_iter(self, depth) -> Iterator["FilesTree"]:
-        subdir_depth = depth + 1
-
-        yield (depth, self)
+    def _dfs_iter(self) -> Iterator["FilesTree"]:
+        yield self
 
         for subdir_node in self.directories.values():
-            yield from subdir_node._dfs_iter(subdir_depth)
+            yield from subdir_node._dfs_iter()
+
+    def _dfs_iter_sorted(self) -> Iterator["FilesTree"]:
+        yield self
+
+        for _, subdir_node in sorted(self.directories.items(), key=lambda kv: kv[0]):
+            yield from subdir_node._dfs_iter_sorted()
+
+    def iter_files(self, *, sort=False) -> Iterator[FileInfo]:
+        if sort:
+            for node in self._dfs_iter_sorted():
+                for _, finfo in sorted(node.files.items(), key=lambda kv: kv[0]):
+                    yield finfo
+
+        else:
+            for node in self._dfs_iter():
+                yield from node.files.values()
 
     def __iter__(self) -> Iterator[FileInfo]:
-        for _, node in self._dfs_iter(0):
+        for node in self._dfs_iter():
             yield node.info
             yield from node.files.values()
 
@@ -317,7 +331,7 @@ def build_cmk_addon_files_tar(
 
             should_exec = subdir_name in subdir_names_should_exec
 
-            for finfo in subdir:
+            for finfo in subdir.iter_files(sort=True):
                 yield (should_exec, finfo)
 
     def get_plugin_tar_relpath(
