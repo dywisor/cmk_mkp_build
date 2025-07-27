@@ -311,8 +311,6 @@ def build_cmk_addon_files_tar(
     def walk_plugin_source(plugin_source: FilesTree) -> Iterator[tuple[bool, FileInfo]]:
         subdir_names_should_exec = {"libexec"}
 
-        yield (False, plugin_source.info)
-
         # include files from all subdirectories (but not from the top-level dir)
         for subdir in plugin_source.directories.values():
             subdir_name = subdir.info.name
