@@ -119,7 +119,7 @@ def main(prog: str, argv: list[str]) -> None | int | bool:
 
     outfile = arg_config.outfile
     if not outfile:
-        outfile_name = "{}_{}.mkp".format(mkp_info["name"], mkp_info["version"])
+        outfile_name = "{}-{}.mkp".format(mkp_info["name"], mkp_info["version"])
         outfile = os.path.abspath(outfile_name)
 
     with open(outfile, "wb") as out_fh:
