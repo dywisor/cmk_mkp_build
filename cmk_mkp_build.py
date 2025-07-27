@@ -125,6 +125,35 @@ def get_argument_parser(prog: str) -> argparse.ArgumentParser:
         help="print generated info to stdout (in addition to creating the mkp file)",
     )
 
+    mkp_info_group = parser.add_argument_group(title="mkp info")
+
+    for name, arg_name in Globals.iter_mkp_info_template_args():
+        mkp_info_group.add_argument(
+            "--{}".format(arg_name.replace("_", "-")),
+            metavar="<value>",
+            dest=arg_name,
+            default=None,
+            help=f"set mkp info: {name}",
+        )
+
+    mkp_info_ext_group = parser.add_argument_group(title="mkp info extensions")
+
+    mkp_info_ext_group.add_argument(
+        "--name-suffix",
+        metavar="<suffix>",
+        dest="mkp_info_ext_name_suffix",
+        default=None,
+        help="append name suffix to plugin name (but not file path)",
+    )
+
+    mkp_info_ext_group.add_argument(
+        "--title-suffix",
+        metavar="<suffix>",
+        dest="mkp_info_ext_title_suffix",
+        default=None,
+        help="append suffix to plugin title / short description",
+    )
+
     return parser
 
 
@@ -138,12 +167,17 @@ def main(prog: str, argv: list[str]) -> None | int | bool:
 
     mkp_info = prepare_mkp_info(arg_config, plugin_source)
 
-    plugin_name = mkp_info["name"]
+    cmk_addon_files_tar_name = "cmk_addons_plugins"
 
-    cmk_addon_files_tar_name = "cmk_addon_files.tar"
+    # NOTE: the cmk_addons_plugins.tar file
+    # will use the original plugin source name,
+    # whereas the plugin name may be different.
+    #
+    # The overall intention here is that python imports should not break:
+    #   from cmk_addons.plugins.PLUGIN_SOURCE_NAME.agent_based.common import ...
 
     cmk_addon_files_list, cmk_addon_files_tar = build_cmk_addon_files_tar(
-        plugin_source, plugin_name, timestamp=timestamp
+        plugin_source, timestamp=timestamp
     )
 
     finalize_mkp_info(mkp_info, cmk_addon_files_tar_name, cmk_addon_files_list)
@@ -223,13 +257,36 @@ def prepare_mkp_info(
 
     # --- end of load_from_mkp_info_file (...) ---
 
-    def add_cmdline_info(
+    def add_cmdline_info_early(
         mkp_info: dict[str, Any], arg_config: argparse.Namespace
     ) -> None:
-        # TODO // NOT IMPLEMENTED
-        pass
+        for name, arg_name in Globals.iter_mkp_info_template_args():
+            value = getattr(arg_config, arg_name)
 
-    # --- end of add_cmdline_info (...) ---
+            if value is not None:
+                mkp_info[name] = value
+
+    # --- end of add_cmdline_info_early (...) ---
+
+    def add_cmdline_info_late(
+        mkp_info: dict[str, Any], arg_config: argparse.Namespace
+    ) -> None:
+        def append_suffix(
+            mkp_info: dict[str, Any], key: str, suffix: str | None, *, sep: str = ""
+        ) -> None:
+            if suffix:
+                try:
+                    value = mkp_info[key]
+                except KeyError:
+                    pass
+                else:
+                    if value:
+                        mkp_info[key] = sep.join((value, suffix))
+
+        append_suffix(mkp_info, "name", arg_config.mkp_info_ext_name_suffix)
+        append_suffix(mkp_info, "title", arg_config.mkp_info_ext_title_suffix, sep=" ")
+
+    # --- end of add_cmdline_info_late (...) ---
 
     def add_missing_info_from_plugin_source(
         mkp_info: dict[str, Any], plugin_source: FilesTree
@@ -298,8 +355,9 @@ def prepare_mkp_info(
     mkp_info = create_default_mkp_info()
 
     load_from_mkp_info_file(mkp_info, plugin_source)
-    add_cmdline_info(mkp_info, arg_config)
+    add_cmdline_info_early(mkp_info, arg_config)
     add_missing_info_from_plugin_source(mkp_info, plugin_source)
+    add_cmdline_info_late(mkp_info, arg_config)
 
     if missing := check_missing_info(mkp_info):
         raise ValueError(
@@ -320,7 +378,7 @@ def finalize_mkp_info(
 
 
 def build_cmk_addon_files_tar(
-    plugin_source: FilesTree, plugin_name: str, *, timestamp: Optional[float] = None
+    plugin_source: FilesTree, *, timestamp: Optional[float] = None
 ) -> tuple[list, bytes]:
     def walk_plugin_source(plugin_source: FilesTree) -> Iterator[tuple[bool, FileInfo]]:
         subdir_names_should_exec = {"libexec"}
@@ -335,13 +393,16 @@ def build_cmk_addon_files_tar(
                 yield (should_exec, finfo)
 
     def get_plugin_tar_relpath(
-        finfo: FileInfo, *, osp_join=os.path.join, plugin_name=plugin_name
+        finfo: FileInfo,
+        *,
+        osp_join=os.path.join,
+        plugin_source_name=plugin_source.info.name,
     ) -> str:
         relpath = finfo.relpath
         if relpath:
-            return osp_join(plugin_name, relpath)
+            return osp_join(plugin_source_name, relpath)
         else:
-            return plugin_name
+            return plugin_source_name
 
     REGTYPE = tarfile.REGTYPE  # ref
     DIRTYPE = tarfile.DIRTYPE  # ref
@@ -479,7 +540,7 @@ def write_mkp_tar(
             member_data_fh.seek(0, os.SEEK_SET)
 
             tinfo = create_tarinfo_file(
-                cmk_addon_files_tar_name, fsize, timestamp=timestamp
+                f"{cmk_addon_files_tar_name}.tar", fsize, timestamp=timestamp
             )
             tar_fh.addfile(tinfo, member_data_fh)
         # --
