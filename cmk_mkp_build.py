@@ -399,13 +399,14 @@ def write_mkp_tar(
         mode="w|gz",
         fileobj=outfileobj,
     ) as tar_fh:
-        for fname, fn_convert in [
-            ("info", pprint.pformat),
-            ("info.json", json.dumps),
+        for fname, fn_convert, add_newline in [
+            ("info", pprint.pformat, True),
+            ("info.json", json.dumps, False),
         ]:
             with io.BytesIO() as member_data_fh:
                 member_data_fh.write(fn_convert(mkp_info).encode("utf-8"))
-                member_data_fh.write(b"\n")
+                if add_newline:
+                    member_data_fh.write(b"\n")
 
                 member_data_fh.seek(0, os.SEEK_END)
                 fsize = member_data_fh.tell()
