@@ -307,9 +307,9 @@ def build_cmk_addon_files_tar(
         timestamp = time.time()
 
     with io.BytesIO() as tar_buffer:
-        with tarfile.TarFile(
+        with tarfile.TarFile.open(
             name=None,
-            mode="w",
+            mode="w|",
             fileobj=tar_buffer,
         ) as tar_fh:
             for should_exec, finfo in walk_plugin_source(plugin_source):
