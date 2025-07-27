@@ -394,9 +394,9 @@ def write_mkp_tar(
     if timestamp is None:
         timestamp = time.time()
 
-    with tarfile.TarFile(
+    with tarfile.TarFile.open(
         name=None,
-        mode="w",
+        mode="w|gz",
         fileobj=outfileobj,
     ) as tar_fh:
         for fname, fn_convert in [
