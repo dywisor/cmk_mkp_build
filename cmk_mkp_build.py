@@ -243,7 +243,7 @@ def prepare_mkp_info(
             ("info.json", load_json_file),
         ]:
             try:
-                mkp_info_file = plugin_source.files["info.yml"]
+                mkp_info_file = plugin_source.files[fname]
 
             except KeyError:
                 pass
